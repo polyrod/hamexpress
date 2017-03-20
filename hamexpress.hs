@@ -92,7 +92,7 @@ main = do
                                     (UpstreamPort x) -> True
                                     _                -> False) flags
 
-  when (isJust usserv  &&  isJust usport) $  do
+  when (isJust usserv  &&  isJust usport && (not $ isJust root)) $  do
     log2stdout "Connecting UpStremServer ...."
     let (Upstream s) = fromJust usserv
     let (UpstreamPort p) = fromJust usport

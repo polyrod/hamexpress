@@ -27,7 +27,7 @@ data Env = Env { _ngQueue     :: TQueue UsrMsg
                , _usn         :: Maybe (NodeId,Node)
                , _usUpQueue   :: TQueue UsrMsg
                , _usDownQueue :: TQueue UsrMsg
-               , _rootid      :: Maybe NodeId
+               , _selfid      :: Maybe NodeId
                }
 
 data Node = BackboneNode  { _nodeId   :: NodeId

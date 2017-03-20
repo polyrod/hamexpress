@@ -5,6 +5,7 @@ import           Control.Exception
 import           Control.Monad
 import           Data.Hash.MD5
 import           Data.Map
+import           Data.Maybe
 import           Helpers
 import           HETypes
 import           Logo
@@ -36,9 +37,9 @@ constructBBNode e (s,sa@(SockAddrInet port host)) = do
   hSetBuffering hdl NoBuffering
 
 
-  (bbc,bbq,bbm) <- atomically $ do
+  (bbc,bbq,bbm,mynodeid) <- atomically $ do
     e' <- readTVar e
-    return $ (_bbChan e',_bbQueue e',_bbm e')
+    return $ (_bbChan e',_bbQueue e',_bbm e',_selfid e')
 
   case Data.Map.lookup nodeid bbm of
     Just n -> do
@@ -47,7 +48,7 @@ constructBBNode e (s,sa@(SockAddrInet port host)) = do
       return Nothing
     _ -> do
       tochan <- atomically $ dupTChan bbc
-      hPutStrLn hdl nodeid
+      hPutStrLn hdl $ (fromJust mynodeid) ++ " " ++ nodeid
       -- connect to Kademlia
       return $ Just $ BackboneNode nodeid tochan bbq hdl
 
@@ -73,7 +74,7 @@ bbHandler e n = do
   log2stdout $ "Currently there are " ++ (show nbb ) ++ " backbone nodes connected"
 
   node2bb <- forkIO $ forever $ do
-    outpub <- atomically $ readTChan (_toChan n)
+    outpub <- atomically $ readTChan ( _toChan n)
     hPutStrLn (_handle n) $ show outpub
 
   handle (\(SomeException _) -> return ()) $ forever $ do
@@ -106,11 +107,12 @@ bbUpstreamNodeHandler e strhost strport = do
       e' <- readTVar e
       return $ ((_usUpQueue e'),( _usDownQueue e'))
 
-  nodeid <- liftM init (hGetLine hdl) -- read upstr nodeId
+  [nodeid,mynodeid] <- liftM (words . init) (hGetLine hdl) -- read upstr/own nodeId from upstr
+
 
   let usn = UpstreamNode nodeid usuq usdq hdl
 
-  atomically $ modifyTVar e (\env -> env { _usn = Just (nodeid,usn) } )
+  atomically $ modifyTVar e (\env -> env { _usn = Just (nodeid,usn) , _selfid = Just mynodeid}  )
 
   usnUp <- forkIO $ forever $ do
      msg <- atomically $ readTQueue usuq
