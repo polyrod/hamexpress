@@ -3,54 +3,15 @@ import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Exception
 import           Control.Monad
-import qualified Data.ByteString        as B
-import qualified Data.ByteString.Char8  as C
+import qualified Data.ByteString           as B
+import qualified Data.ByteString.Char8     as C
 import           Data.Hash.MD5
 import           Data.Map
 import           Data.Maybe
 import           HETypes
-import qualified Network.Kademlia       as K
-import           Network.Socket
+import           Network.Socket            hiding (recv, recvFrom, send, sendTo)
+import           Network.Socket.ByteString (recv, send)
 import           System.IO
-
-
-kadAddPeer ::TVar Env -> String -> IO ()
-kadAddPeer env p = do
-  e <- atomically $ readTVar env
-  let key = KademliaID $ C.pack $ md5s $ Str $ "peers"
-
-  if (isJust $ _kademlia e)
-     then do
-        ml <- K.lookup (fromJust $ _kademlia e) key
-        if isJust ml
-           then do
-             let ((List l),_) = fromJust ml
-
-             K.store (fromJust $ _kademlia e) key (List $ l ++ [p])
-             return ()
-
-           else do
-             K.store (fromJust $ _kademlia e) key (List [p])
-             return ()
-     else log2stdout "kadAddPeer: not connected"
-
-kadDelPeer ::TVar Env -> String -> IO ()
-kadDelPeer env p = do
-  e <- atomically $ readTVar env
-  let key = KademliaID $ C.pack $ md5s $ Str $ "peers"
-
-  if (isJust $ _kademlia e)
-     then do
-        ml <- K.lookup (fromJust $ _kademlia e) key
-        if isJust ml
-           then do
-             let ((List l),_) = fromJust ml
-
-             K.store (fromJust $ _kademlia e) key (List $ Prelude.filter (/= p) l )
-
-           else return ()
-
-     else log2stdout "kadAddPeer: not connected"
 
 
 

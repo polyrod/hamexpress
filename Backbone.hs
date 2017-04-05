@@ -10,8 +10,8 @@ import           Data.Maybe
 import           Helpers
 import           HETypes
 import           Logo
-import qualified Network.Kademlia       as K
-import           Network.Socket
+import           Network.Socket            hiding (recv, recvFrom, send, sendTo)
+import           Network.Socket.ByteString (recv, send)
 import           System.IO
 
 addBB :: TVar Env -> Node -> STM ()
@@ -39,9 +39,9 @@ constructBBNode e (s,sa@(SockAddrInet port host)) = do
   hSetBuffering hdl NoBuffering
 
 
-  (bbc,bbq,bbm,mynodeid,skn) <- atomically $ do
+  (bbc,bbq,bbm,mynodeid) <- atomically $ do
     e' <- readTVar e
-    return $ (_bbChan e',_bbQueue e',_bbm e',_selfid e',_selfKadNode e')
+    return $ (_bbChan e',_bbQueue e',_bbm e',_selfid e')
 
   case Data.Map.lookup nodeid bbm of
     Just n -> do
@@ -51,13 +51,7 @@ constructBBNode e (s,sa@(SockAddrInet port host)) = do
     _ -> do
       tochan <- atomically $ dupTChan bbc
 
-      let p = K.peer $ fromJust skn
-      let kport = K.peerPort p
-
-      e' <- atomically $ readTVar e
-      let lkport = _selfKadPort e'
-
-      hPutStrLn hdl $ (fromJust mynodeid) ++ " " ++ nodeid ++ " " ++ show lkport
+      hPutStrLn hdl $ (fromJust mynodeid) ++ " " ++ nodeid
       return $ Just $ BackboneNode nodeid tochan bbq hdl
 
 
@@ -69,7 +63,6 @@ handleBBConnections e sock = forever $ do
   case bbNode of
     Just cn -> do
       atomically $ addBB e cn
-      kadAddPeer e (_nodeId cn)
       forkIO $ bbHandler e cn
       return ()
     _       -> return ()
@@ -94,43 +87,12 @@ bbHandler e n = do
   killThread node2bb
 
   atomically $ delBB e n
-  kadDelPeer e (_nodeId n)
 
   nbb' <- atomically $ numBB e
   log2stdout $ "Backbone Node " ++ (show $ _nodeId n) ++ " disconnected"
   log2stdout $ "Currently there are " ++ (show nbb' ) ++ " backbone nodes connected"
 
   hClose $ _handle n
-
-bbjoinKademlia :: TVar Env -> String -> String -> String -> IO (K.KademliaInstance KademliaID Ham)
-bbjoinKademlia e hn kport nid = do
-  e' <- atomically $ readTVar e
---  log2stdout $ show e'
-  inst <- K.create ( toEnum $ _selfKadPort e') . toKadID . fromJust $ _selfid e'
-  let upNode = K.Node (K.Peer hn (toEnum $ read $ kport)) . toKadID $ nid
---  log2stdout $ show upNode
-  joinresult <- K.joinNetwork inst upNode
-  case joinresult of
-    K.JoinSucces -> do
-      log2stdout  $ (show $ fromJust $ _selfid e') ++  ": joined Kademlia DataStore"
-      !mr <- K.lookup inst . toKadID . fromJust $ _selfid e'
-      peers <- K.dumpPeers inst
-      print peers
-    _ -> log2stdout $  (show $ fromJust $ _selfid e') ++ ": error connecting to Kademlia DataStore -> " ++ show joinresult
-
-  return inst
-
-
-bbleaveKademlia :: TVar Env -> IO ()
-bbleaveKademlia env = do
-  e <- atomically $ readTVar env
-  if isJust (_kademlia e)
-     then do
-        K.close (fromJust $ _kademlia e)
-        atomically $ modifyTVar env (\env -> env { _kademlia = Nothing}  )
-     else log2stdout $ "bbleaveKedemlia: cannot leave , not connected"
-
-
 
 
 bbUpstreamNodeHandler :: TVar Env -> String -> String -> IO ()
@@ -149,23 +111,17 @@ bbUpstreamNodeHandler e strhost strport =  do
   log2stdout $ "bbUpstreamNodeHandler: connected to " ++ (show sn)
   hdl <- socketToHandle s ReadWriteMode
   hSetBuffering hdl NoBuffering
-  (usuq,usdq,skp,kad) <- atomically $ do
+  (usuq,usdq) <- atomically $ do
       e' <- readTVar e
-      return $ (_usUpQueue e', _usDownQueue e',_selfKadPort e',_kademlia e')
+      return $ (_usUpQueue e', _usDownQueue e')
 
-  f@[nodeid,mynodeid,kport] <- liftM (words ) (hGetLine hdl) -- read upstr/own nodeId + kport from upstr
+  f@[nodeid,mynodeid] <- liftM (words ) (hGetLine hdl) -- read upstr/own nodeId from upstr
 
   log2stdout $ "Upstream Read: " ++ (show f)
 
   let usn = UpstreamNode nodeid usuq usdq hdl
 
   atomically $ modifyTVar e (\env -> env { _usn = Just (nodeid,usn) , _selfid = Just mynodeid}  )
-
-  kadinst <- bbjoinKademlia e hn kport nodeid
-
-  let localNode = K.Node (K.Peer hn' (toEnum $ skp)) . toKadID $ mynodeid
-
-  atomically $ modifyTVar e (\env -> env { _kademlia = Just kadinst , _selfKadNode = Just localNode })
 
   e'' <- atomically $ readTVar e
   log2stdout $ show e''
@@ -176,7 +132,6 @@ bbUpstreamNodeHandler e strhost strport =  do
 
 
   handle (\(SomeException _) -> do
-      bbleaveKademlia e
       killThread usnUp
       hClose hdl
       threadDelay $ 5 * 1000 * 1000
@@ -188,14 +143,13 @@ bbUpstreamNodeHandler e strhost strport =  do
   killThread usnUp
 
   `finally` do -- finally
-      bbleaveKademlia e
       e' <- atomically $ readTVar e
       let (_,n) = fromJust $ _usn e'
       let h = _handle n
       hClose h
       atomically $ modifyTVar e (\env -> env { _usn = Nothing } )
 
-  -- Respawn
+-- Respawn
 --  threadDelay $ 10 * 1000 * 1000
 --  bbUpstreamNodeHandler e strhost strport
 

@@ -8,7 +8,8 @@ import           Data.Map
 import           Helpers
 import           HETypes
 import           Logo
-import           Network.Socket
+import           Network.Socket            hiding (recv, recvFrom, send, sendTo)
+import           Network.Socket.ByteString (recv, send)
 import           System.IO
 
 
@@ -36,7 +37,6 @@ handleClientConnections e sock = forever $ do
   case clientNode of
     Just cn -> do
       atomically $ addClient e cn
-      kadAddPeer e (_nodeId cn)
       forkIO $ clientHandler e cn
       return ()
     _       -> return ()
@@ -105,7 +105,6 @@ clientHandler e n = do
   killThread sys2client
 
   atomically $ delClient e n
-  kadDelPeer e (_nodeId n)
 
   nc <- atomically $ numClient e
   log2stdout $ "Client " ++ (_callSign n) ++ " " ++ (show $ _nodeId n) ++ " disconnected"
