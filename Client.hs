@@ -36,6 +36,7 @@ handleClientConnections e sock = forever $ do
   case clientNode of
     Just cn -> do
       atomically $ addClient e cn
+      kadAddPeer e (_nodeId cn)
       forkIO $ clientHandler e cn
       return ()
     _       -> return ()
@@ -87,24 +88,24 @@ clientHandler e n = do
   hPutStr (_handle n) $ "\nConnecting you as '" ++ _callSign n ++ "' to dxClusterNode '" ++ dxhostname  ++ ":" ++ dxport ++  "' .... "
   sleep 2
 
-{--
   dxcChan <- newTChanIO
   dxc <- forkIO $ dxCluster e n dxcChan
   hPutStrLn (_handle n) $ "done\n"
   hPutStrLn (_handle n) $ take 6 $ cycle "\n"
   sleep 5
---}
+
   handle (\(SomeException _) -> return ()) $ forever $ do
     inp <- liftM init (hGetLine $ _handle n)
- --   atomically $ writeTChan dxcChan inp
+    atomically $ writeTChan dxcChan inp
     atomically $ writeTQueue (_msgQueue n) (Trace inp)
 
---  atomically $ writeTChan dxcChan "bye"
---  killThread dxc
+  atomically $ writeTChan dxcChan "bye"
+  killThread dxc
   killThread priv2client
   killThread sys2client
 
   atomically $ delClient e n
+  kadDelPeer e (_nodeId n)
 
   nc <- atomically $ numClient e
   log2stdout $ "Client " ++ (_callSign n) ++ " " ++ (show $ _nodeId n) ++ " disconnected"
