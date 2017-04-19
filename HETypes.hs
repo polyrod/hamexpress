@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module HETypes where
 import           Control.Concurrent
 import           Control.Concurrent.STM
@@ -8,6 +9,8 @@ import           Data.Map
 import           Network.Socket            hiding (recv, recvFrom, send, sendTo)
 import           Network.Socket.ByteString (recv, send)
 import           System.IO
+
+import           DHT
 
 
 
@@ -32,8 +35,17 @@ data Env = Env { _ngQueue     :: TQueue UsrMsg
                , _usUpQueue   :: TQueue UsrMsg
                , _usDownQueue :: TQueue UsrMsg
                , _selfid      :: Maybe NodeId
+               , _dhtinst     :: Maybe (Instance NodeId (DHTdata String))
                }
                deriving Show
+
+data DHTdata i = Counter Integer
+               | Value i
+               | List [DHTdata i]
+               deriving (Show,Read)
+
+instance Show (Instance NodeId (DHTdata a)) where
+  show _ = "DHTinst"
 
 instance Show (TChan a) where
   show _ = "TChan"

@@ -27,10 +27,11 @@ import           System.Environment
 
 import           Network.Info
 
+import           DHT
 data Flag = Verbose  | Version | Debugging | Root
           | Upstream String | UpstreamPort String | LocalPort String | IFace String
 
-            deriving Show
+            deriving (Show,Eq)
 
 options :: [OptDescr Flag]
 options =
@@ -67,10 +68,7 @@ main = do
   sup <- newSupervisor supSpec
 
   -- is rootflag given
-  let root = headMay $ filter (\case
-                                   (Root)         -> True
-                                   _              -> False) flags
-
+  let root = headMay $ filter (== Root) flags
 
   -- iface
   let iface = headMay $ filter (\case
@@ -146,6 +144,7 @@ main = do
     return ()
 
 
+
   -- start msg router thread
   forkSupervised sup fibonacciRetryPolicy $ router e (isJust root)
 
@@ -188,7 +187,7 @@ createEnv isroot = do
                then Just $ md5s $ Str $ "aLLyOURbASEaREbELONGtOuS" ++ show r
                else Nothing
 
-  return $ Env ngq ngc bbq bbc cm bbm Nothing usuq usdq nodeid
+  return $ Env ngq ngc bbq bbc cm bbm Nothing usuq usdq nodeid Nothing
 
 self_announcer :: TVar Env -> IO ()
 self_announcer env = forever $ do
