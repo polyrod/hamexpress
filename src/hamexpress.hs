@@ -125,6 +125,12 @@ main = do
          then createEnv True
          else createEnv False
 
+
+{- TODO
+  let dht = if isroot
+               then DHT.new (Peer (_n
+               else Nothing
+-}
   e <- newTVarIO env
 
   -- Check if to connect to UpStrem Server/Port
@@ -186,6 +192,7 @@ createEnv isroot = do
   let nodeid = if isroot
                then Just $ md5s $ Str $ "aLLyOURbASEaREbELONGtOuS" ++ show r
                else Nothing
+
 
   return $ Env ngq ngc bbq bbc cm bbm Nothing usuq usdq nodeid Nothing
 
