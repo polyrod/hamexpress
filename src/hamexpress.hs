@@ -203,8 +203,9 @@ self_announcer env = forever $ do
   atomically $ do
     let sid = fromJust (_selfid e)
     let msg = Trace $ "This is : " ++ sid
-    writeTChan (_ngChan e) msg
     writeTChan (_bbChan e) msg
+    when (not $ isJust $ _usn e) $ writeTChan (_ngChan e) msg
+    when (isJust $ _usn e) $ writeTQueue (_usUpQueue e) msg
 
 
 -- Message Router thread dispatches msgs
