@@ -44,7 +44,7 @@ dxCluster e n c = do
 
   hPutStrLn hdl (_callSign n)
 
-  dxcUp <- forkIO $ forever $ do
+  dxcUp <- forkIO $ handle (\(SomeException _) -> return ()) $ forever $ do
      dxmsg <- atomically $ readTChan c
      hPutStrLn hdl dxmsg
 
