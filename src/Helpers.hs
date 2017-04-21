@@ -17,8 +17,15 @@ import           Control.Concurrent.Supervisor.Types
 import           Control.Retry
 
 
+displayUsrMsg :: UsrMsg -> String
+displayUsrMsg (DXCluster x) = "DXC> " ++ x
+displayUsrMsg (Trace x) = "HEC>" ++ x
+displayUsrMsg x = "HEC>" ++ show x
+
+cappedFibonacciRetryPolicy :: RetryPolicyM IO
 cappedFibonacciRetryPolicy = capDelay (10*1000*1000) fibonacciRetryPolicy
 
+heFork :: QueueLike q => Supervisor0 q -> IO () -> IO ThreadId
 heFork sup = forkSupervised sup cappedFibonacciRetryPolicy
 
 checkCallsign :: String -> IO (Maybe CallSign)

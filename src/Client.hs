@@ -79,11 +79,11 @@ clientHandler e n = do
 
   sys2client <- forkIO $ forever $ do
     outpub <- atomically $ readTChan (_pubChan n)
-    hPutStrLn (_handle n) $ show outpub
+    hPutStrLn (_handle n) $ displayUsrMsg outpub
 
   priv2client <- forkIO $ forever $ do
     outpriv <- atomically $ readTChan (_privChan n)
-    hPutStrLn (_handle n) $ show outpriv
+    hPutStrLn (_handle n) $ displayUsrMsg outpriv
 
   hPutStr (_handle n) $ "\nConnecting you as '" ++ _callSign n ++ "' to dxClusterNode '" ++ dxhostname  ++ ":" ++ dxport ++  "' .... "
   sleep 2
