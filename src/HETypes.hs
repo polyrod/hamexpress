@@ -23,7 +23,7 @@ type CallSign = String
 data UsrMsg = Msg CallSign CallSign String
             | Trace String   -- DEBUG
             | DXCluster String   -- DEBUG
-            deriving (Show,Read)
+            deriving (Read)
 
 data Env = Env { _ngQueue     :: TQueue UsrMsg
                , _ngChan      :: TChan UsrMsg
@@ -43,6 +43,11 @@ data DHTdata i = Counter Integer
                | Value i
                | List [DHTdata i]
                deriving (Show,Read)
+
+
+instance Show (UsrMsg) where
+  show (Trace x) = "HEC> " ++ x
+  show (DXCluster x) = "DXC> " ++ x
 
 instance Show (Instance NodeId (DHTdata a)) where
   show _ = "DHTinst"

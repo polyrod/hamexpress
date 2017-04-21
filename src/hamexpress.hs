@@ -146,22 +146,22 @@ main = do
     log2stdout "Connecting UpStremServer ...."
     let (Upstream s) = fromJust usserv
     let (UpstreamPort p) = fromJust usport
-    forkSupervised sup fibonacciRetryPolicy $ bbUpstreamNodeHandler e s p
+    heFork sup $ bbUpstreamNodeHandler e s p
     return ()
 
 
 
   -- start msg router thread
-  forkSupervised sup fibonacciRetryPolicy $ router e (isJust root)
+  heFork sup $ router e (isJust root)
 
   -- start backbone handler
-  forkSupervised sup fibonacciRetryPolicy $ handleBBConnections e backboneSocket
+  heFork sup $ handleBBConnections e backboneSocket
 
   -- start backbone handler
-  forkSupervised sup fibonacciRetryPolicy $ self_announcer e
+  heFork sup $ self_announcer e
 
   -- handle telnet clients
-  forkSupervised sup fibonacciRetryPolicy $ handleClientConnections e listenSocket
+  heFork sup $ handleClientConnections e listenSocket
 
   go (eventStream sup)
 

@@ -12,8 +12,14 @@ import           HETypes
 import           Network.Socket            hiding (recv, recvFrom, send, sendTo)
 import           Network.Socket.ByteString (recv, send)
 import           System.IO
+import           Control.Concurrent.Supervisor
+import           Control.Concurrent.Supervisor.Types
+import           Control.Retry
 
 
+cappedFibonacciRetryPolicy = capDelay (10*1000*1000) fibonacciRetryPolicy
+
+heFork sup = forkSupervised sup cappedFibonacciRetryPolicy
 
 checkCallsign :: String -> IO (Maybe CallSign)
 checkCallsign s = return $ Just s

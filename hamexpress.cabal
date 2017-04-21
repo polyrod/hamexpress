@@ -40,4 +40,5 @@ executable hamexpress
                      , random
                      , safe
                      , network-info
+                     , retry
 
