@@ -1,8 +1,6 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
-import           Backbone
-import           Client
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Concurrent.Supervisor
@@ -10,59 +8,92 @@ import           Control.Exception
 import           Control.Monad
 import           Data.Hash.MD5
 import           Data.Map                      (empty)
-import           Helpers
-import           HETypes
+import           Data.Maybe                    (fromJust, isJust)
+import           Network.Info
 import           Network.Socket                hiding (recv, recvFrom, send,
                                                 sendTo)
 import           Network.Socket.ByteString     (recv, send)
+import           Safe
+
 import           System.IO
 import           System.Random
-
-import           Logo
-
-import           Data.Maybe                    (fromJust, isJust)
-import           Safe
+import           System.Posix.IO
+import           System.Posix.Process
 import           System.Console.GetOpt
 import           System.Environment
 
-import           Network.Info
 
+import           Backbone
+import           Client
 import           DHT
-data Flag = Verbose  | Version | Debugging | Root
-          | Upstream String | UpstreamPort String | LocalPort String | IFace String
+import           Helpers
+import           HETypes
+import           Logo
+
+
+data Flag = Verbose  | Foreground | Debugging | Root | Help
+          | Upstream String | UpstreamPort String | LocalPort String | DhtPort String | IFace String
 
             deriving (Show,Eq)
 
 options :: [OptDescr Flag]
 options =
-  [ Option ['v']     ["verbose"]            (NoArg Verbose)               "chatty output"
-  , Option ['d']     ["debug"]              (NoArg Debugging)             "debugging"
-  , Option ['R']     ["Root"]               (NoArg Root)                  "this node will be the RootNode"
-  , Option ['V','?'] ["version"]            (NoArg Version)               "show version number"
-  , Option ['U']     ["UpstreamServer"]     (ReqArg Upstream "SERVER")    "upstream SERVER"
-  , Option ['P']     ["UPort"]              (ReqArg UpstreamPort  "PORT") "upstream PORT"
-  , Option ['L']     ["LPort"]              (ReqArg LocalPort  "PORT")    "local PORT"
-  , Option ['i']     ["iface"]              (ReqArg IFace "INTERFACE")  "interface to use"
+  [ Option ['h']     ["help"]               (NoArg Help)                      "this help"
+  , Option ['i']     ["interface"]          (ReqArg IFace "<interface>")      "interface to use"
+  , Option ['u']     ["upstream-server"]    (ReqArg Upstream "<server-ip>")   "upstream server (ip-only)"
+  , Option ['p']     ["upstream-port"]      (ReqArg UpstreamPort  "<port>")   "upstream port"
+  , Option ['l']     ["local-port-base"]    (ReqArg LocalPort  "<port>")      "local portbase"
+  , Option ['d']     ["local-dht-port"]     (ReqArg DhtPort  "<port>")        "local dht port"
+  , Option ['f']     ["forground"]          (NoArg Foreground)                "Dont deamonize; Stay in forground"
+  , Option ['v']     ["verbose"]            (NoArg Verbose)                   "be verbose"
+  , Option ['d']     ["debug"]              (NoArg Debugging)                 "debugging"
+  , Option ['r']     ["root"]               (NoArg Root)                      "this node will be the RootNode (use only to spawn new network) "
   ]
 
-compilerOpts :: [String] -> IO ([Flag], [String])
-compilerOpts argv =
+
+
+header = "Usage: hamexpress [OPTION...]"
+
+heOpts :: [String] -> IO ([Flag], [String])
+heOpts argv =
   case getOpt Permute options argv of
       (o,n,[]  ) -> return (o,n)
       (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header options))
-  where header = "Usage: hamexpress [OPTION...] files..."
+
+
+spawnFn :: (t -> IO ()) -> t -> IO ()
+spawnFn fn arg = do 
+  forkProcess $ do
+    mapM_ closeFd [stdInput, stdOutput, stdError]
+    nullFd <- openFd "/dev/null" ReadWrite Nothing defaultFileFlags
+    mapM_ (dupTo nullFd) [stdInput, stdOutput, stdError]
+    closeFd nullFd
+    fn arg
+  return ()
 
 main :: IO ()
 main = do
-
-
-
+  
   -- parse cmdline args
   argv <- getArgs
-  (flags,str) <- compilerOpts argv
-  log2stdout $ "Flags  : " ++ (show flags)
-  log2stdout $ "String : " ++ (show str)
+  (flags,str) <- heOpts argv
+  let debug = isJust $ headMay $ filter (== Root) flags
+  let foreground = isJust $ headMay $ filter (== Foreground) flags
 
+  if not foreground
+    then do
+      putStrLn "daemonizing now ... bye"
+      spawnFn server flags 
+    else server flags
+
+  when debug $ log2stdout $ "Flags  : " ++ (show flags)
+  when debug $ log2stdout $ "String : " ++ (show str)
+
+  when( isJust $ headMay $ filter (== Help) flags) $ ioError (userError (usageInfo header options))
+
+
+server :: [Flag] -> IO ()
+server flags = do
 
   supSpec <- newSupervisorSpec OneForOne
   sup <- newSupervisor supSpec
@@ -106,6 +137,7 @@ main = do
                      ,(SockAddrInet (read lp) lip))
              else return ((SockAddrInet 7355 lip)
                          ,(SockAddrInet 7373 lip))
+
 
 
   -- listen socket for telnet clients
@@ -202,7 +234,7 @@ self_announcer env = forever $ do
   e <- atomically $ readTVar env
   atomically $ do
     let sid = fromJust (_selfid e)
-    let msg = Trace $ "This is : " ++ sid
+    let msg = Trace $ "node " ++ sid ++ " active"
     writeTChan (_bbChan e) msg
     when (not $ isJust $ _usn e) $ writeTChan (_ngChan e) msg
     when (isJust $ _usn e) $ writeTQueue (_usUpQueue e) msg
@@ -250,18 +282,3 @@ router env isroot = do
 
   return ()
 
-{-
-bb2sys_router :: TVar Env -> IO ()
-bb2sys_router e = forever $ do
-  e <- atomically $ readTVar e
-  msg <- atomically $ readTQueue (_bbQueue e)
-  atomically $ writeTQueue (_ngChan e) msg
-
-sys2_bb_ng_router :: TVar Env -> IO ()
-sys2_bb_ng_router e = forever $ do
-  e <- atomically $ readTVar e
-  msg <- atomically $ readTQueue (_ngQueue e)
-  atomically $ writeTChan (_bbChan e) msg
-  atomically $ writeTChan (_ngChan e) msg
-
--}

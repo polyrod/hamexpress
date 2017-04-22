@@ -41,4 +41,6 @@ executable hamexpress
                      , safe
                      , network-info
                      , retry
+                     , unix
+                     , directory
 
