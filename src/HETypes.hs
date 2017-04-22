@@ -17,7 +17,8 @@ import           DHT
 dxhostname = "dd5xx.incq.com"
 dxport = "4000"
 
-type NodeId = String
+type NodeId = Integer
+
 type CallSign = String
 
 data UsrMsg = Msg CallSign CallSign String
@@ -36,6 +37,7 @@ data Env = Env { _ngQueue     :: TQueue UsrMsg
                , _usDownQueue :: TQueue UsrMsg
                , _selfid      :: Maybe NodeId
                , _dhtinst     :: Maybe (Instance NodeId (DHTdata String))
+               , _dhtport     :: Maybe PortNumber
                }
                deriving Show
 

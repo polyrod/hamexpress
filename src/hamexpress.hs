@@ -133,8 +133,8 @@ server flags = do
              then do
               let (LocalPort lp) = fromJust lport
               let d = 73-55
-              return ((SockAddrInet ((read lp) - d) lip)
-                     ,(SockAddrInet (read lp) lip))
+              return ((SockAddrInet (read lp) lip)
+                     ,(SockAddrInet ((read lp)+d) lip))
              else return ((SockAddrInet 7355 lip)
                          ,(SockAddrInet 7373 lip))
 
@@ -158,12 +158,26 @@ server flags = do
          else createEnv False
 
 
-{- TODO
-  let dht = if isroot
-               then DHT.new (Peer (_n
-               else Nothing
--}
-  e <- newTVarIO env
+  -- if rootnode spawn dht root node
+  let mdhtp = headMay $ filter (\case
+                                    (DhtPort x)      -> True
+                                    _                -> False) flags
+
+  let (DhtPort dhtport) = if isJust mdhtp 
+                            then fromJust mdhtp
+                            else DhtPort $ show 7399 
+
+  --let dhtid::(ID Integer) = DHT.ID (read $ fromJust $ _selfid env) 
+  let dhtid::(ID NodeId) = DHT.ID $ fromJust $ _selfid env 
+  dht <- if isJust root
+               then Just <$> DHT.new (Peer dhtid lip (read dhtport))
+               else return Nothing
+
+  let env' = env { _dhtinst = dht ,_dhtport = Just $ read $  dhtport}
+
+
+  -- put Env into STM
+  e <- newTVarIO $ env'
 
   -- Check if to connect to UpStrem Server/Port
   let usserv = headMay $ filter (\case
@@ -222,11 +236,11 @@ createEnv isroot = do
   (r:: Integer) <- randomIO
 
   let nodeid = if isroot
-               then Just $ md5s $ Str $ "aLLyOURbASEaREbELONGtOuS" ++ show r
+               then Just $ md5i $ Str $ "aLLyOURbASEaREbELONGtOuS" ++ show r
                else Nothing
 
 
-  return $ Env ngq ngc bbq bbc cm bbm Nothing usuq usdq nodeid Nothing
+  return $ Env ngq ngc bbq bbc cm bbm Nothing usuq usdq nodeid Nothing Nothing
 
 self_announcer :: TVar Env -> IO ()
 self_announcer env = forever $ do
@@ -234,7 +248,7 @@ self_announcer env = forever $ do
   e <- atomically $ readTVar env
   atomically $ do
     let sid = fromJust (_selfid e)
-    let msg = Trace $ "node " ++ sid ++ " active"
+    let msg = Trace $ "node " ++ show sid ++ " active"
     writeTChan (_bbChan e) msg
     when (not $ isJust $ _usn e) $ writeTChan (_ngChan e) msg
     when (isJust $ _usn e) $ writeTQueue (_usUpQueue e) msg

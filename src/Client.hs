@@ -43,7 +43,7 @@ handleClientConnections e sock = forever $ do
 
 constructClientNode :: TVar Env -> (Socket , SockAddr) -> IO (Maybe Node)
 constructClientNode e (s,sa@(SockAddrInet port host)) = do
-  let nodeid = md5s $ Str $ show sa
+  let nodeid = md5i $ Str $ show sa
 
   hdl <- socketToHandle s ReadWriteMode
   hSetBuffering hdl NoBuffering

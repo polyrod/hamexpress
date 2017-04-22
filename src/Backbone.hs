@@ -14,6 +14,8 @@ import           Network.Socket            hiding (recv, recvFrom, send, sendTo)
 import           Network.Socket.ByteString (recv, send)
 import           System.IO
 
+import qualified DHT as DHT
+
 addBB :: TVar Env -> Node -> STM ()
 addBB e n =  do
   e' <- readTVar e
@@ -33,15 +35,15 @@ numBB e = do
 
 constructBBNode :: TVar Env -> (Socket , SockAddr) -> IO (Maybe Node)
 constructBBNode e (s,sa@(SockAddrInet port host)) = do
-  let nodeid = md5s $ Str $ show sa --host
+  let nodeid = md5i $ Str $ show sa --host
 
   hdl <- socketToHandle s ReadWriteMode
   hSetBuffering hdl NoBuffering
 
 
-  (bbc,bbq,bbm,mynodeid) <- atomically $ do
+  (bbc,bbq,bbm,mynodeid,mydhtport) <- atomically $ do
     e' <- readTVar e
-    return $ (_bbChan e',_bbQueue e',_bbm e',_selfid e')
+    return $ (_bbChan e',_bbQueue e',_bbm e',_selfid e',_dhtport e')
 
   case Data.Map.lookup nodeid bbm of
     Just n -> do
@@ -51,7 +53,7 @@ constructBBNode e (s,sa@(SockAddrInet port host)) = do
     _ -> do
       tochan <- atomically $ dupTChan bbc
 
-      hPutStrLn hdl $ (fromJust mynodeid) ++ " " ++ nodeid
+      hPutStrLn hdl $ (show $ fromJust mynodeid) ++ " " ++ (show nodeid) ++ " " ++ (show $ fromJust mydhtport)
       return $ Just $ BackboneNode nodeid tochan bbq hdl
 
 
@@ -111,17 +113,22 @@ bbUpstreamNodeHandler e strhost strport =  do
   log2stdout $ "bbUpstreamNodeHandler: connected to " ++ (show sn)
   hdl <- socketToHandle s ReadWriteMode
   hSetBuffering hdl NoBuffering
-  (usuq,usdq) <- atomically $ do
+  (usuq,usdq,mydhtport) <- atomically $ do
       e' <- readTVar e
-      return $ (_usUpQueue e', _usDownQueue e')
+      return $ (_usUpQueue e', _usDownQueue e',_dhtport e')
 
-  f@[nodeid,mynodeid] <- liftM (words ) (hGetLine hdl) -- read upstr/own nodeId from upstr
+  f@[nodeid,mynodeid,dhtport] <- (words ) <$> (hGetLine hdl) -- read upstr/own nodeId from upstr
 
   log2stdout $ "Upstream Read: " ++ (show f)
 
-  let usn = UpstreamNode nodeid usuq usdq hdl
+  let usn = UpstreamNode (read nodeid) usuq usdq hdl
 
-  atomically $ modifyTVar e (\env -> env { _usn = Just (nodeid,usn) , _selfid = Just mynodeid}  )
+  dhtinst <- DHT.new (DHT.Peer (DHT.ID (read mynodeid)) ha' (fromJust mydhtport))
+  DHT.join dhtinst (DHT.Peer (DHT.ID (read nodeid)) ha (read dhtport))
+  threadDelay $ 2*1000*1000
+  DHT.put  dhtinst (DHT.ID (md5i $ Str $ "notRoot")) (Value "NotRoot")
+
+  atomically $ modifyTVar e (\env -> env { _usn = Just ((read nodeid),usn) , _selfid = Just (read mynodeid),_dhtinst = Just $ dhtinst}  )
 
   e'' <- atomically $ readTVar e
   log2stdout $ show e''
